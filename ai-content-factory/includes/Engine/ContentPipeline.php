@@ -16,6 +16,9 @@ if (!defined('ABSPATH')) {
 class ContentPipeline {
 
     public static function process_keyword($keyword_id) {
+        // Tăng thời gian thực thi tối đa lên 180s tránh bị Timeout khi AI sinh bài dài
+        @set_time_limit(180);
+
         global $wpdb;
 
         $kw_table  =$wpdb->prefix . 'aicf_keywords';
@@ -33,7 +36,7 @@ class ContentPipeline {
 
         try {
             $provider_type = get_option('aicf_default_provider', 'gemini');
-            $provider = AIFactory::create($provider_type);
+            $provider      = AIFactory::create($provider_type);
 
             $current_year  = date('Y');
 
@@ -61,7 +64,6 @@ class ContentPipeline {
             // Ép dọn sạch toàn bộ Slashes, Entity Escape
             $template_prompt = wp_unslash($raw_template);
             $template_prompt = html_entity_decode($template_prompt, ENT_QUOTES, 'UTF-8');
-            $template_prompt = str_replace(array('\vert', '\\vert', '\Vert{}'), '\vert{}',$template_prompt);
 
             // Thay thế các biến động vào Prompt
             $prompt = str_replace(
@@ -69,9 +71,10 @@ class ContentPipeline {
                 [$keyword_clean,$current_year, $brand_name,$company_name, $website,$hotline, $address],$template_prompt
             );
 
-            $start_time = microtime(true);$request = new AIRequest($prompt);$response = $provider->generateText($request);
-            $duration = microtime(true) -$start_time;
+            $start_time = microtime(true);$request    = new AIRequest($prompt);$response   = $provider->generateText($request);
+            $duration   = microtime(true) -$start_time;
 
+            // SỬA LỖI TẠI ĐÂY: Đổi \vert{}\vert{} thành toán tử OR chuẩn ||
             if (!$response \vert{}\vert{} empty($response->getContent())) {
                 throw new \Exception('AI không trả về nội dung.');
             }
@@ -87,10 +90,10 @@ class ContentPipeline {
                 'message'      => "Sinh nội dung AI thành công cho từ khóa '{$keyword_clean}' trong " . round($duration, 2) . "s"
             ]);
 
-            // Làm sạch code Markdown
+            // Làm sạch code Markdown & Lọc bỏ ký tự gạch đứng bị lỗi mã hóa
             $content = preg_replace('/^```html\s*/i', '', $content);
             $content = preg_replace('/^```\s*/i', '', $content);$content = preg_replace('/```$/', '', $content);
-            $content = str_replace(array('\vert', '\\vert'), '|', $content);
+            $content = str_replace(array('\vert', '\\vert', '\Vert{}'), '|', $content);
 
             // Trích xuất tiêu đề bài viết
             $title = '';
@@ -106,16 +109,16 @@ class ContentPipeline {
 
             // === HẬU KỲ 1: KIỂM TRA TRÙNG LẶP NỘI DUNG ===
             $dup_checker = new DuplicateChecker(80);
-            $dup_result = $dup_checker->check_content($title, $content);
+            $dup_result  = $dup_checker->check_content($title, $content);
 
             if ($dup_result['is_duplicate']) {
                 Logger::warning("Cảnh báo trùng lặp ({$dup_result['score']}%) với bài viết ID: {$dup_result['matched_with']} cho từ khóa '{$keyword_clean}'", 'pipeline');
             }
 
             // === HẬU KỲ 2: TỰ ĐỘNG CHÈN INTERNAL LINKS ===
-            $max_links = (int) get_option('aicf_max_internal_links', 3);
+            $max_links       = (int) get_option('aicf_max_internal_links', 3);
             $original_length = strlen($content);
-            $content = InternalLinker::inject_links($content, 0, $max_links);
+            $content         = InternalLinker::inject_links($content, 0, $max_links);
 
             if (strlen($content) !== $original_length) {
                 Logger::info("Đã chèn liên kết nội bộ tự động vào bài viết '{$title}'", 'pipeline');
@@ -129,11 +132,11 @@ class ContentPipeline {
 
             // Lưu bài viết vào WordPress (Draft)
             $post_id = wp_insert_post([
-                'post_title'    => $title,
-                'post_content'  => trim($content),
-                'post_status'   => 'draft',
-                'post_type'     => 'post',
-                'post_category' => $cat_ids
+                'post_title'   => $title,
+                'post_content' => trim($content),
+                'post_status'  => 'draft',
+                'post_type'    => 'post',
+                'post_category'=> $cat_ids
             ]);
 
             if (is_wp_error($post_id)) {
