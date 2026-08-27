@@ -15,9 +15,6 @@ class CampaignAjax {
         add_action('wp_ajax_aicf_delete_campaign', [__CLASS__, 'delete_campaign']);
     }
 
-    /**
-     * Bật / Tắt trạng thái Campaign (Active <-> Paused)
-     */
     public static function toggle_status() {
         @ob_clean();
         check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
@@ -31,7 +28,6 @@ class CampaignAjax {
         global $wpdb;
         $table = $wpdb->prefix . 'aicf_campaigns';
 
-        // Lấy trạng thái hiện tại
         $current_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM {$table} WHERE id = %d", $campaign_id));
 
         if (!$current_status) {
@@ -58,9 +54,6 @@ class CampaignAjax {
         wp_send_json_error(['message' => 'Không thể cập nhật trạng thái chiến dịch.']);
     }
 
-    /**
-     * Cập nhật thông tin Chiến dịch (Tên, Mô tả, Prompt Template...)
-     */
     public static function edit_campaign() {
         @ob_clean();
         check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
@@ -77,15 +70,13 @@ class CampaignAjax {
         global $wpdb;
         $table = $wpdb->prefix . 'aicf_campaigns';
 
-        $data = [
-            'name'        => $name,
-            'description' => $description,
-            'updated_at'  => current_time('mysql')
-        ];
-
         $updated = $wpdb->update(
             $table,
-            $data,
+            [
+                'name'        => $name,
+                'description' => $description,
+                'updated_at'  => current_time('mysql')
+            ],
             ['id' => $campaign_id],
             ['%s', '%s', '%s'],
             ['%d']
@@ -99,7 +90,7 @@ class CampaignAjax {
     }
 
     /**
-     * Xóa Chiến dịch (Kèm dọn dẹp data liên quan)
+     * Xóa Chiến dịch -> TỰ ĐỘNG XÓA SẠCH TẤT CẢ TỪ KHÓA LÊN QUAN
      */
     public static function delete_campaign() {
         @ob_clean();
@@ -116,17 +107,20 @@ class CampaignAjax {
         $table_keywords  = $wpdb->prefix . 'aicf_keywords';
         $table_articles  = $wpdb->prefix . 'aicf_articles';
 
-        // 1. Xóa các Keywords thuộc Campaign
-        $wpdb->delete($table_keywords, ['campaign_id' => $campaign_id], ['%d']);
+        // 1. XÓA TOÀN BỘ KEYWORDS THUỘC CAMPAIGN NÀY
+        $deleted_keywords = $wpdb->delete($table_keywords, ['campaign_id' => $campaign_id], ['%d']);
 
-        // 2. Cập nhật các Bài viết thuộc Campaign về campaign_id = NULL (hoặc xóa luôn tùy quy trình)
+        // 2. Gán bài viết thuộc Campaign này về NULL (để giữ bài viết đã sinh)
         $wpdb->update($table_articles, ['campaign_id' => null], ['campaign_id' => $campaign_id]);
 
-        // 3. Xóa Campaign
-        $deleted = $wpdb->delete($table_campaigns, ['id' => $campaign_id], ['%d']);
+        // 3. Xóa chính Campaign
+        $deleted_campaign = $wpdb->delete($table_campaigns, ['id' => $campaign_id], ['%d']);
 
-        if ($deleted) {
-            wp_send_json_success(['message' => 'Đã xóa chiến dịch thành công!']);
+        if ($deleted_campaign) {
+            wp_send_json_success([
+                'message'          => 'Đã xóa chiến dịch thành công!',
+                'deleted_keywords' => intval($deleted_keywords)
+            ]);
         }
 
         wp_send_json_error(['message' => 'Không thể xóa chiến dịch.']);
