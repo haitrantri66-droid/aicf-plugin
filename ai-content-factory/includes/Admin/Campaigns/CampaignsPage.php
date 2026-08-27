@@ -41,7 +41,8 @@ class CampaignsPage {
             $action_id = intval($_GET['id']);
             $action    = sanitize_text_field($_GET['action']);
 
-            if ($action_id > 0 && check_admin_referer('aicf_campaign_action_' . $action_id)) {
+            // Chỉ thực hiện kiểm tra Nonce nếu không phải là action 'edit' (vì edit hiển thị form)
+            if ($action !== 'edit' && $action_id > 0 && check_admin_referer('aicf_campaign_action_' . $action_id)) {
                 if ($action === 'activate') {
                     $wpdb->update($table, ['status' => 'active'], ['id' => $action_id]);
                     echo '<div class="notice notice-success is-dismissible"><p>Đã kích hoạt chiến dịch thành công.</p></div>';
@@ -56,10 +57,10 @@ class CampaignsPage {
             }
         }
 
-        // 3. Xử lý Cập nhật Chiến Dịch (Khi bấm Lưu ở modal Sửa)
+        // 3. Xử lý Cập nhật Chiến Dịch (Khi bấm Lưu ở form Sửa)
         if (isset($_POST['aicf_update_campaign'])) {
             $edit_id = intval($_POST['edit_campaign_id'] ?? 0);
-            if ($edit_id > 0 && check_admin_referer('aicf_edit_campaign_action_' . $edit_id)) {
+            if ($edit_id > 0 && check_admin_referer('aicf_edit_campaign_action_' . $edit_id, 'aicf_edit_nonce')) {
                 $title       = sanitize_text_field($_POST['campaign_title'] ?? '');
                 $daily_limit = intval($_POST['daily_limit'] ?? 10);
 
@@ -116,7 +117,7 @@ class CampaignsPage {
         $today_start = current_time('Y-m-d 00:00:00');
         $today_end   = current_time('Y-m-d 23:59:59');
 
-        // Kiểm tra xem có đang mở Modal Sửa không
+        // Kiểm tra xem có đang mở Form Sửa không
         $editing_campaign = null;
         if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
             $edit_id = intval($_GET['id']);
@@ -175,12 +176,12 @@ class CampaignsPage {
                 </form>
             </div>
 
-            <!-- MODAL HOẶC BOX CHỈNH SỬA CHIẾN DỊCH (CHỈ HIỆN KHI BẤM NÚT SỬA) -->
+            <!-- FORM CHỈNH SỬA CHIẾN DỊCH (CHỈ HIỆN KHI BẤM NÚT SỬA) -->
             <?php if ($editing_campaign): ?>
                 <div style="background: #fff8e5; padding: 20px; border: 1px solid #faebcc; margin: 20px 0; max-width: 600px; border-radius: 4px;">
                     <h2>✏️ Chỉnh Sửa Chiến Dịch #<?php echo esc_html($editing_campaign->id); ?></h2>
                     <form method="post" action="<?php echo esc_url(admin_url('admin.php?page=aicf-campaigns')); ?>">
-                        <?php wp_nonce_field('aicf_edit_campaign_action_' . $editing_campaign->id); ?>
+                        <?php wp_nonce_field('aicf_edit_campaign_action_' . $editing_campaign->id, 'aicf_edit_nonce'); ?>
                         <input type="hidden" name="edit_campaign_id" value="<?php echo esc_attr($editing_campaign->id); ?>">
 
                         <p>
@@ -257,13 +258,13 @@ class CampaignsPage {
                                 </td>
                                 <td><?php echo esc_html($c->created_at); ?></td>
                                 
-                                <!-- CỘT THAO TÁC ĐÃ BỔ SUNG CÁC NÚT KÍCH HOẠT / TẠM DỪNG / SỬA / XÓA -->
                                 <td>
                                     <?php 
                                     $base_url     = admin_url('admin.php?page=aicf-campaigns&id=' . $c->id);
                                     $activate_url = wp_nonce_url($base_url . '&action=activate', 'aicf_campaign_action_' . $c->id);
                                     $pause_url    = wp_nonce_url($base_url . '&action=pause', 'aicf_campaign_action_' . $c->id);
                                     $delete_url   = wp_nonce_url($base_url . '&action=delete', 'aicf_campaign_action_' . $c->id);
+                                    // URL nút Sửa không cần nonce vì nút Sửa chỉ load hiển thị form
                                     $edit_url     = admin_url('admin.php?page=aicf-campaigns&action=edit&id=' . $c->id);
                                     ?>
 
