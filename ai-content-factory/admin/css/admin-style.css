@@ -1,0 +1,149 @@
+.aicf-dashboard {
+    margin-top: 20px;
+}
+
+.aicf-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.aicf-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 6px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.aicf-card-icon {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    margin-right: 15px;
+    color: #2271b1;
+}
+
+.aicf-card-data {
+    display: flex;
+    flex-direction: column;
+}
+
+.aicf-card-title {
+    font-size: 13px;
+    color: #646970;
+    font-weight: 500;
+}
+
+.aicf-card-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1d2327;
+    margin-top: 4px;
+}
+
+/* AI Content Factory Admin Layout */
+.aicf-dashboard-wrap {
+    margin: 20px 20px 0 0;
+}
+
+/* Progress Bar Component */
+.aicf-progress-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.aicf-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.aicf-progress-bar-bg {
+    background: #f0f0f1;
+    height: 18px;
+    border-radius: 9px;
+    overflow: hidden;
+    position: relative;
+}
+
+.aicf-progress-bar-fill {
+    background: linear-gradient(90deg, #2271b1, #135e96);
+    height: 100%;
+    width: 0%;
+    transition: width 0.4s ease-in-out;
+}
+
+/* Status Badges */
+.badge-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.badge-pending { background: #f0f0f1; color: #50575e; }
+.badge-processing { background: #cce5ff; color: #004085; }
+.badge-completed { background: #d4edda; color: #155724; }
+.badge-failed { background: #f8d7da; color: #721c24; }
+
+/* Modal Box Component */
+.aicf-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100000;
+    align-items: center;
+    justify-content: center;
+}
+
+.aicf-modal-overlay.active {
+    display: flex;
+}
+
+.aicf-modal-content {
+    background: #fff;
+    width: 80%;
+    max-width: 900px;
+    max-height: 85vh;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.aicf-modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.aicf-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.aicf-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #ddd;
+    background: #f9f9f9;
+    text-align: right;
+}
+
+.aicf-modal-close {
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: bold;
+}
