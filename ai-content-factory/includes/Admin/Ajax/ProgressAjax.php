@@ -17,15 +17,13 @@ class ProgressAjax {
      * AJAX handler to get realtime pipeline progress for active campaigns/articles.
      */
     public static function get_progress() {
+        // Tắt buffer để tránh output rác làm vỡ JSON
+        @ob_clean();
+
         if (!SecurityManager::check_capability('manage_options')) {
             wp_send_json_error(['message' => 'Unauthorized user capability']);
         }
 
-        // NOTE: admin-script.js polls this endpoint with $.post(), so the
-        // nonce/campaign_id arrive in $_POST, not $_GET. Reading only
-        // $_GET here meant this handler always failed with "Invalid
-        // security token" even once the action name matched. $_REQUEST
-        // covers both GET and POST so this keeps working either way.
         $nonce = $_REQUEST['nonce'] ?? '';
         if (!$nonce || !SecurityManager::verify_nonce($nonce, 'aicf_admin_nonce')) {
             wp_send_json_error(['message' => 'Invalid security token']);
@@ -38,7 +36,10 @@ class ProgressAjax {
 
         if ($campaign_id > 0) {
             $articles = $wpdb->get_results(
-                $wpdb->prepare("SELECT id, title, generation_state, seo_score, error_message FROM {$table_articles} WHERE campaign_id = %d", $campaign_id)
+                $wpdb->prepare(
+                    "SELECT id, title, generation_state, seo_score, error_message FROM {$table_articles} WHERE campaign_id = %d ORDER BY id DESC LIMIT 50", 
+                    $campaign_id
+                )
             );
         } else {
             $articles = $wpdb->get_results(
@@ -46,10 +47,6 @@ class ProgressAjax {
             );
         }
 
-        // NOTE: admin-script.js's progress bar expects an aggregate shape
-        // (percentage/total/completed/processing/failed/pending), not a
-        // per-article list. Compute that aggregate here instead of
-        // changing the response to a shape nothing on the page could use.
         $total = count($articles);
         $completed = 0;
         $processing = 0;
@@ -58,28 +55,30 @@ class ProgressAjax {
         $percentage_sum = 0;
 
         $formatted = [];
-        foreach ($articles as $art) {
-            $pct = self::map_state_to_percentage($art->generation_state);
-            $percentage_sum += $pct;
+        if (!empty($articles)) {
+            foreach ($articles as $art) {
+                $pct = self::map_state_to_percentage($art->generation_state);
+                $percentage_sum += $pct;
 
-            if (in_array($art->generation_state, ['ready', 'published'], true)) {
-                $completed++;
-            } elseif ($art->generation_state === 'failed') {
-                $failed++;
-            } elseif ($art->generation_state === 'queued') {
-                $pending++;
-            } else {
-                $processing++;
+                if (in_array($art->generation_state, ['ready', 'published'], true)) {
+                    $completed++;
+                } elseif ($art->generation_state === 'failed') {
+                    $failed++;
+                } elseif ($art->generation_state === 'queued') {
+                    $pending++;
+                } else {
+                    $processing++;
+                }
+
+                $formatted[] = [
+                    'id'            => intval($art->id),
+                    'title'         => !empty($art->title) ? esc_html($art->title) : 'Đang khởi tạo bài viết...',
+                    'state'         => esc_html($art->generation_state),
+                    'progress_pct'  => $pct,
+                    'seo_score'     => intval($art->seo_score),
+                    'error_message' => esc_html($art->error_message ?? '')
+                ];
             }
-
-            $formatted[] = [
-                'id'            => $art->id,
-                'title'         => $art->title ?: 'Generating Title...',
-                'state'         => $art->generation_state,
-                'progress_pct'  => $pct,
-                'seo_score'     => intval($art->seo_score),
-                'error_message' => $art->error_message
-            ];
         }
 
         wp_send_json_success([
