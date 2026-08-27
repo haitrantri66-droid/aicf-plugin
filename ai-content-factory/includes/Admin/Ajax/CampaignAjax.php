@@ -1,7 +1,7 @@
 <?php
 namespace AICF\Admin\Ajax;
 
-use AICF\Campaign\CampaignManager;
+use AICF\Security\SecurityManager;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -10,90 +10,125 @@ if (!defined('ABSPATH')) {
 class CampaignAjax {
 
     public static function init() {
-        add_action('wp_ajax_aicf_save_campaign', [__CLASS__, 'save_campaign']);
+        add_action('wp_ajax_aicf_toggle_campaign_status', [__CLASS__, 'toggle_status']);
+        add_action('wp_ajax_aicf_edit_campaign', [__CLASS__, 'edit_campaign']);
         add_action('wp_ajax_aicf_delete_campaign', [__CLASS__, 'delete_campaign']);
     }
 
-    public static function save_campaign() {
+    /**
+     * Bật / Tắt trạng thái Campaign (Active <-> Paused)
+     */
+    public static function toggle_status() {
         @ob_clean();
-
-        $nonce = $_POST['nonce'] ?? '';
-        if (!wp_verify_nonce($nonce, 'aicf_admin_nonce')) {
-            wp_send_json_error(['message' => 'Lỗi bảo mật Nonce. Hãy F5 làm mới trang!']);
-        }
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Bạn không có quyền thực hiện thao tác này.']);
-        }
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
 
         $campaign_id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : 0;
-        $name        = isset($_POST['name']) ? sanitize_text_field(wp_unslash($_POST['name'])) : (isset($_POST['title']) ? sanitize_text_field(wp_unslash($_POST['title'])) : '');
-
-        if (empty($name)) {
-            wp_send_json_error(['message' => 'Tên chiến dịch không được để trống!']);
+        if ($campaign_id <= 0) {
+            wp_send_json_error(['message' => 'ID Campaign không hợp lệ.']);
         }
 
-        $payload = [
-            'name'                  => $name,
-            'description'           => isset($_POST['description']) ? sanitize_textarea_field(wp_unslash($_POST['description'])) : '',
-            'website'               => isset($_POST['website']) ? esc_url_raw(wp_unslash($_POST['website'])) : '',
-            'language'              => isset($_POST['language']) ? sanitize_text_field(wp_unslash($_POST['language'])) : (isset($_POST['target_language']) ? sanitize_text_field(wp_unslash($_POST['target_language'])) : 'vi'),
-            'country'               => isset($_POST['country']) ? sanitize_text_field(wp_unslash($_POST['country'])) : 'VN',
-            'target_location'       => isset($_POST['target_location']) ? sanitize_text_field(wp_unslash($_POST['target_location'])) : '',
-            'category_id'           => isset($_POST['category_id']) ? intval($_POST['category_id']) : 0,
-            'publishing_mode'       => isset($_POST['publishing_mode']) ? sanitize_text_field(wp_unslash($_POST['publishing_mode'])) : 'draft',
-            'ai_provider'           => isset($_POST['ai_provider']) ? sanitize_text_field(wp_unslash($_POST['ai_provider'])) : 'gemini',
-            'ai_model'              => isset($_POST['ai_model']) ? sanitize_text_field(wp_unslash($_POST['ai_model'])) : 'gemini-1.5-flash',
-            'daily_generate_limit'  => isset($_POST['daily_generate_limit']) ? intval($_POST['daily_generate_limit']) : 5,
-            'daily_publish_limit'   => isset($_POST['daily_publish_limit']) ? intval($_POST['daily_publish_limit']) : 3,
-            'auto_category'          => isset($_POST['auto_category']) ? intval($_POST['auto_category']) : 1,
-            'allow_create_category' => isset($_POST['allow_create_category']) ? intval($_POST['allow_create_category']) : 0,
-            'auto_tags'             => isset($_POST['auto_tags']) ? intval($_POST['auto_tags']) : 1,
-            'auto_internal_links'   => isset($_POST['auto_internal_links']) ? intval($_POST['auto_internal_links']) : 1,
-            'check_duplicate'       => isset($_POST['check_duplicate']) ? intval($_POST['check_duplicate']) : 1,
-        ];
+        global $wpdb;
+        $table = $wpdb->prefix . 'aicf_campaigns';
 
-        if ($campaign_id > 0) {
-            $updated = CampaignManager::update($campaign_id, $payload);
-            if ($updated !== false) {
-                wp_send_json_success(['message' => 'Cập nhật chiến dịch thành công!', 'campaign_id' => $campaign_id]);
-            } else {
-                wp_send_json_error(['message' => 'Không thể cập nhật chiến dịch.']);
-            }
-        } else {
-            $new_id = CampaignManager::create($payload);
-            if ($new_id) {
-                wp_send_json_success(['message' => 'Tạo chiến dịch mới thành công!', 'campaign_id' => $new_id]);
-            } else {
-                global $wpdb;
-                wp_send_json_error(['message' => 'Lỗi Database: ' . ($wpdb->last_error ? $wpdb->last_error : 'Không thể khởi tạo bản ghi.')]);
-            }
+        // Lấy trạng thái hiện tại
+        $current_status = $wpdb->get_var($wpdb->prepare("SELECT status FROM {$table} WHERE id = %d", $campaign_id));
+
+        if (!$current_status) {
+            wp_send_json_error(['message' => 'Không tìm thấy Chiến dịch.']);
         }
+
+        $new_status = ($current_status === 'active') ? 'paused' : 'active';
+
+        $updated = $wpdb->update(
+            $table,
+            ['status' => $new_status, 'updated_at' => current_time('mysql')],
+            ['id' => $campaign_id],
+            ['%s', '%s'],
+            ['%d']
+        );
+
+        if ($updated !== false) {
+            wp_send_json_success([
+                'message'    => 'Đã ' . ($new_status === 'active' ? 'kích hoạt' : 'TẠM DỪNG') . ' chiến dịch thành công!',
+                'new_status' => $new_status
+            ]);
+        }
+
+        wp_send_json_error(['message' => 'Không thể cập nhật trạng thái chiến dịch.']);
     }
 
+    /**
+     * Cập nhật thông tin Chiến dịch (Tên, Mô tả, Prompt Template...)
+     */
+    public static function edit_campaign() {
+        @ob_clean();
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
+
+        $campaign_id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : 0;
+        $name        = isset($_POST['name']) ? sanitize_text_field(wp_unslash($_POST['name'])) : '';
+        $description = isset($_POST['description']) ? sanitize_textarea_field(wp_unslash($_POST['description'])) : '';
+
+        if ($campaign_id <= 0 || empty($name)) {
+            wp_send_json_error(['message' => 'Tên chiến dịch không được để trống.']);
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'aicf_campaigns';
+
+        $data = [
+            'name'        => $name,
+            'description' => $description,
+            'updated_at'  => current_time('mysql')
+        ];
+
+        $updated = $wpdb->update(
+            $table,
+            $data,
+            ['id' => $campaign_id],
+            ['%s', '%s', '%s'],
+            ['%d']
+        );
+
+        if ($updated !== false) {
+            wp_send_json_success(['message' => 'Cập nhật chiến dịch thành công!']);
+        }
+
+        wp_send_json_error(['message' => 'Không có thay đổi hoặc có lỗi xảy ra.']);
+    }
+
+    /**
+     * Xóa Chiến dịch (Kèm dọn dẹp data liên quan)
+     */
     public static function delete_campaign() {
         @ob_clean();
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
 
-        $nonce = $_POST['nonce'] ?? '';
-        if (!wp_verify_nonce($nonce, 'aicf_admin_nonce')) {
-            wp_send_json_error(['message' => 'Lỗi xác thực bảo mật']);
+        $campaign_id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : 0;
+        if ($campaign_id <= 0) {
+            wp_send_json_error(['message' => 'ID Campaign không hợp lệ.']);
         }
 
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Bạn không có quyền thực hiện thao tác này.']);
+        global $wpdb;
+        $table_campaigns = $wpdb->prefix . 'aicf_campaigns';
+        $table_keywords  = $wpdb->prefix . 'aicf_keywords';
+        $table_articles  = $wpdb->prefix . 'aicf_articles';
+
+        // 1. Xóa các Keywords thuộc Campaign
+        $wpdb->delete($table_keywords, ['campaign_id' => $campaign_id], ['%d']);
+
+        // 2. Cập nhật các Bài viết thuộc Campaign về campaign_id = NULL (hoặc xóa luôn tùy quy trình)
+        $wpdb->update($table_articles, ['campaign_id' => null], ['campaign_id' => $campaign_id]);
+
+        // 3. Xóa Campaign
+        $deleted = $wpdb->delete($table_campaigns, ['id' => $campaign_id], ['%d']);
+
+        if ($deleted) {
+            wp_send_json_success(['message' => 'Đã xóa chiến dịch thành công!']);
         }
 
-        $id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : 0;
-
-        if ($id > 0) {
-            $deleted = CampaignManager::delete($id);
-            if ($deleted) {
-                wp_send_json_success(['message' => 'Xóa chiến dịch thành công']);
-            } else {
-                wp_send_json_error(['message' => 'Không thể xóa chiến dịch.']);
-            }
-        }
-
-        wp_send_json_error(['message' => 'ID chiến dịch không hợp lệ']);
+        wp_send_json_error(['message' => 'Không thể xóa chiến dịch.']);
     }
 }
