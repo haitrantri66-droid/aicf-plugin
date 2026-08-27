@@ -74,7 +74,7 @@ class ContentPipeline {
             $duration   = microtime(true) -$start_time;
 
             // SỬA LỖI TẠI ĐÂY: Dùng toán tử HOẶC || chuẩn PHP
-            if (!$response \vert{}\vert{} empty($response->getContent())) {
+            if (!$response || empty($response->getContent())) {
                 throw new \Exception('AI không trả về nội dung.');
             }
 
