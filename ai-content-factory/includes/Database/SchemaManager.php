@@ -7,12 +7,7 @@ if (!defined('ABSPATH')) {
 
 class SchemaManager {
 
-    // Bumped: schema below now matches the columns actually used by
-    // CampaignManager / KeywordManager / ArticleRepository / Logger.
-    // Previous versions only had a small subset of these columns, which
-    // caused every $wpdb->insert()/update() in those classes to silently
-    // fail (unknown column), even though the AJAX/UI wiring looked fine.
-    const DB_VERSION = '1.2.0';
+    const DB_VERSION = '2.0.0';
 
     public static function init() {
         $installed_ver = get_option('aicf_db_version');
@@ -22,7 +17,6 @@ class SchemaManager {
         }
     }
 
-    // Phương thức Alias phòng trường hợp Activator hoặc code cũ gọi
     public static function check_update() {
         self::init();
     }
@@ -53,6 +47,16 @@ class SchemaManager {
             publishing_mode varchar(20) DEFAULT 'draft',
             ai_provider varchar(50) DEFAULT 'openai',
             ai_model varchar(100) DEFAULT 'gpt-4o-mini',
+            daily_generate_limit int(11) DEFAULT 5,
+            daily_publish_limit int(11) DEFAULT 3,
+            today_generated int(11) DEFAULT 0,
+            today_published int(11) DEFAULT 0,
+            last_reset_date date DEFAULT NULL,
+            auto_category tinyint(1) DEFAULT 1,
+            allow_create_category tinyint(1) DEFAULT 0,
+            auto_tags tinyint(1) DEFAULT 1,
+            auto_internal_links tinyint(1) DEFAULT 1,
+            check_duplicate tinyint(1) DEFAULT 1,
             status varchar(20) DEFAULT 'active',
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -68,6 +72,9 @@ class SchemaManager {
             cluster varchar(255) DEFAULT '',
             priority tinyint(2) DEFAULT 3,
             target_url varchar(255) DEFAULT '',
+            retry_count int(11) DEFAULT 0,
+            last_error text DEFAULT NULL,
+            last_attempt_at datetime DEFAULT NULL,
             status varchar(20) DEFAULT 'pending',
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY  (id),
@@ -88,6 +95,8 @@ class SchemaManager {
             brief longtext DEFAULT NULL,
             outline longtext DEFAULT NULL,
             seo_score int(3) DEFAULT 0,
+            duplicate_status varchar(20) DEFAULT 'pass',
+            similarity_score float DEFAULT 0,
             generation_state varchar(50) DEFAULT 'queued',
             error_message text DEFAULT NULL,
             status varchar(20) DEFAULT 'draft',
