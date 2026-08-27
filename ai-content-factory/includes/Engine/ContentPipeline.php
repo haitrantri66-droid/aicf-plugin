@@ -16,8 +16,7 @@ if (!defined('ABSPATH')) {
 class ContentPipeline {
 
     public static function process_keyword($keyword_id) {
-        // Tăng thời gian thực thi tối đa lên 180s tránh bị Timeout khi AI sinh bài dài
-        @set_time_limit(180);
+        @set_time_limit(180); // Tăng timeout để tránh treo tiến trình
 
         global $wpdb;
 
@@ -74,7 +73,7 @@ class ContentPipeline {
             $start_time = microtime(true);$request    = new AIRequest($prompt);$response   = $provider->generateText($request);
             $duration   = microtime(true) -$start_time;
 
-            // SỬA LỖI TẠI ĐÂY: Đổi \vert{}\vert{} thành toán tử OR chuẩn ||
+            // SỬA LỖI TẠI ĐÂY: Dùng toán tử HOẶC || chuẩn PHP
             if (!$response \vert{}\vert{} empty($response->getContent())) {
                 throw new \Exception('AI không trả về nội dung.');
             }
@@ -90,10 +89,10 @@ class ContentPipeline {
                 'message'      => "Sinh nội dung AI thành công cho từ khóa '{$keyword_clean}' trong " . round($duration, 2) . "s"
             ]);
 
-            // Làm sạch code Markdown & Lọc bỏ ký tự gạch đứng bị lỗi mã hóa
+            // Làm sạch code Markdown
             $content = preg_replace('/^```html\s*/i', '', $content);
             $content = preg_replace('/^```\s*/i', '', $content);$content = preg_replace('/```$/', '', $content);
-            $content = str_replace(array('\vert', '\\vert', '\Vert{}'), '|', $content);
+            $content = str_replace(array('\vert', '\\vert'), '|', $content);
 
             // Trích xuất tiêu đề bài viết
             $title = '';
