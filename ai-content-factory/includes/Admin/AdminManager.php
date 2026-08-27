@@ -8,6 +8,13 @@ use AICF\Admin\Articles\ArticlesPage;
 use AICF\Admin\Logs\LogsPage;
 use AICF\Admin\Settings;
 
+// Import đầy đủ 5 Ajax Handlers
+use AICF\Admin\Ajax\ProgressAjax;
+use AICF\Admin\Ajax\KeywordAjax;
+use AICF\Admin\Ajax\ArticleAjax;
+use AICF\Admin\Ajax\AIAjax;
+use AICF\Admin\Ajax\CampaignAjax;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -15,9 +22,27 @@ if (!defined('ABSPATH')) {
 class AdminManager {
 
     public function init() {
+        // Đăng ký Admin Menu Pages
         add_action('admin_menu', [$this, 'register_menu_pages']);
+
+        // Khởi tạo các Ajax Handlers
+        $this->init_ajax_handlers();
     }
 
+    /**
+     * Tự động khởi tạo toàn bộ AJAX Endpoints cho hệ thống Admin
+     */
+    private function init_ajax_handlers() {
+        ProgressAjax::init();
+        KeywordAjax::init();
+        ArticleAjax::init();
+        AIAjax::init();
+        CampaignAjax::init();
+    }
+
+    /**
+     * Đăng ký cấu trúc Menu & Submenu cho Plugin
+     */
     public function register_menu_pages() {
         add_menu_page(
             __('AI Content Factory', 'ai-content-factory'),
