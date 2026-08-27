@@ -1,6 +1,8 @@
 <?php
 namespace AICF\Admin\Ajax;
 
+use AICF\Security\SecurityManager;
+use AICF\Keyword\KeywordManager;
 use AICF\AI\AIManager;
 use AICF\AI\DTO\AIRequest;
 
@@ -17,21 +19,21 @@ class AIAjax {
         add_action('wp_ajax_aicf_generate_content', [__CLASS__, 'generate_content']);
     }
 
+    /**
+     * Lưu cài đặt API Keys & Provider mặc định
+     */
     public static function save_settings() {
         @ob_clean();
-        check_ajax_referer('aicf_admin_nonce', 'nonce');
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
 
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Không đủ quyền truy cập']);
-        }
+        $openai_key = sanitize_text_field(wp_unslash($_POST['openai_key'] ?? ''));
+        $gemini_key = sanitize_text_field(wp_unslash($_POST['gemini_key'] ?? ''));
+        $provider   = sanitize_text_field(wp_unslash($_POST['default_provider'] ?? 'openai'));
 
-        $openai_key = sanitize_text_field($_POST['openai_key'] ?? '');
-        $gemini_key = sanitize_text_field($_POST['gemini_key'] ?? '');
-        $provider   = sanitize_text_field($_POST['default_provider'] ?? 'openai');
-
-        // Lọc sạch rác \vert nếu có vô tình dán vào ô input Settings
-        $openai_key = str_replace(array('\vert', '\\vert', '\|'), '|', $openai_key);
-        $gemini_key = str_replace(array('\vert', '\\vert', '\|'), '|', $gemini_key);
+        // Lọc sạch rác \vert nếu có vô tình dán vào ô input
+        $openai_key = str_replace(['\vert', '\\vert', '\|'], '|', $openai_key);
+        $gemini_key = str_replace(['\vert', '\\vert', '\|'], '|', $gemini_key);
 
         update_option('aicf_openai_api_key', $openai_key);
         update_option('aicf_gemini_api_key', $gemini_key);
@@ -40,63 +42,82 @@ class AIAjax {
         wp_send_json_success(['message' => 'Đã lưu Cài đặt thành công!']);
     }
 
+    /**
+     * Thêm nhanh từ khóa đơn lẻ
+     */
     public static function save_keyword() {
         @ob_clean();
-        check_ajax_referer('aicf_admin_nonce', 'nonce');
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
 
-        global $wpdb;
-        $keyword     = sanitize_text_field($_POST['keyword'] ?? '');
+        $keyword     = sanitize_text_field(wp_unslash($_POST['keyword'] ?? ''));
         $campaign_id = intval($_POST['campaign_id'] ?? 0);
 
-        if (empty($keyword)) {
-            wp_send_json_error(['message' => 'Từ khóa không được để trống!']);
+        if (empty($keyword) || $campaign_id <= 0) {
+            wp_send_json_error(['message' => 'Vui lòng chọn Campaign và nhập Từ khóa!']);
         }
 
         // Lọc sạch ký tự \vert trong từ khóa
-        $keyword = str_replace(array('\vert', '\\vert', '\|'), '|', $keyword);
+        $keyword = str_replace(['\vert', '\\vert', '\|'], '|', $keyword);
 
-        $result = $wpdb->insert(
-            $wpdb->prefix . 'aicf_keywords',
-            [
-                'campaign_id' => $campaign_id,
-                'keyword'     => $keyword,
-                'status'      => 'pending',
-                'created_at'  => current_time('mysql')
-            ],
-            ['%d', '%s', '%s', '%s']
-        );
+        $res = KeywordManager::add($campaign_id, $keyword);
 
-        if ($result !== false) {
+        if ($res) {
             wp_send_json_success(['message' => 'Thêm từ khóa thành công!']);
         } else {
-            wp_send_json_error(['message' => 'Lỗi DB: ' . $wpdb->last_error]);
+            wp_send_json_error(['message' => 'Từ khóa đã tồn tại trong Campaign này.']);
         }
     }
 
+    /**
+     * Kiểm tra kết nối API Key
+     */
     public static function test_api() {
         @ob_clean();
-        check_ajax_referer('aicf_admin_nonce', 'nonce');
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
 
-        $provider = sanitize_text_field($_POST['provider'] ?? 'openai');
-        $key = ($provider === 'gemini') ? get_option('aicf_gemini_api_key') : get_option('aicf_openai_api_key');
+        $provider = sanitize_text_field(wp_unslash($_POST['provider'] ?? 'openai'));
+        $key      = ($provider === 'gemini') ? get_option('aicf_gemini_api_key') : get_option('aicf_openai_api_key');
 
         if (empty($key)) {
             wp_send_json_error(['message' => 'Chưa điền API Key cho ' . strtoupper($provider)]);
         }
 
-        wp_send_json_success(['message' => 'Kết nối API ' . strtoupper($provider) . ' hợp lệ!']);
+        try {
+            if (class_exists('AICF\AI\AIManager')) {
+                $aiManager = new AIManager();
+                // Thực hiện ping thử 1 request ngắn tới Provider
+                $request  = new AIRequest("Reply with 'OK'");
+                $response = $aiManager->generate_text($request, $provider);
+
+                if (!empty($response->get_content())) {
+                    wp_send_json_success(['message' => 'Kết nối API ' . strtoupper($provider) . ' thành công!']);
+                }
+            }
+
+            wp_send_json_success(['message' => 'API Key ' . strtoupper($provider) . ' đã được ghi nhận.']);
+        } catch (\Throwable $e) {
+            $msg = str_replace(['\vert', '\\vert', '\|'], '|', $e->getMessage());
+            wp_send_json_error(['message' => 'Lỗi kết nối API: ' . esc_html($msg)]);
+        }
     }
 
+    /**
+     * Test sinh nội dung AI nhanh từ Admin Panel
+     */
     public static function generate_content() {
         @ob_clean();
-        check_ajax_referer('aicf_admin_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Không đủ quyền truy cập']);
+        
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
         }
 
-        $keyword = sanitize_text_field($_POST['keyword'] ?? '');
-        
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
+
+        $keyword = sanitize_text_field(wp_unslash($_POST['keyword'] ?? ''));
+
         if (empty($keyword)) {
             wp_send_json_error(['message' => 'Từ khóa không hợp lệ!']);
         }
@@ -104,20 +125,21 @@ class AIAjax {
         try {
             if (class_exists('AICF\AI\AIManager')) {
                 $aiManager = new AIManager();
-                $request = new AIRequest("Write SEO content for: " . $keyword);
-                $response = $aiManager->generate_text($request);
-                $content = str_replace(array('\vert', '\\vert'), '|', $response->get_content());
+                $request   = new AIRequest("Write SEO content for: " . $keyword);
+                $response  = $aiManager->generate_text($request);
                 
+                $content = str_replace(['\vert', '\\vert', '\|'], '|', $response->get_content());
+
                 wp_send_json_success([
                     'message' => 'Tạo bài viết thành công!',
                     'content' => $content
                 ]);
             } else {
-                wp_send_json_error(['message' => 'Không tìm thấy module AIManager']);
+                wp_send_json_error(['message' => 'Không tìm thấy module AIManager.']);
             }
         } catch (\Throwable $e) {
-            $msg = str_replace(array('\vert', '\\vert'), '|', $e->getMessage());
-            wp_send_json_error(['message' => $msg]);
+            $msg = str_replace(['\vert', '\\vert', '\|'], '|', $e->getMessage());
+            wp_send_json_error(['message' => 'Lỗi AI: ' . esc_html($msg)]);
         }
     }
 }
