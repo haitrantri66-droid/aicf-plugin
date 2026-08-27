@@ -1,318 +1,658 @@
 jQuery(document).ready(function ($) {
-    console.log('AICF Core Engine Active');
+    'use strict';
 
-    // ==========================================
-    // 1. QUẢN LÝ CAMPAIGN (Thêm, Sửa, Xóa)
-    // ==========================================
+    console.log('AICF Admin JS Active');
 
-    // Thêm / Lưu Campaign
-    $(document).on('submit', '#aicf-campaign-form, .aicf-campaign-form', function (e) {
-        e.preventDefault();
-        var $form = $(this);
-        var $btn = $form.find('button[type="submit"], input[type="submit"]');
+    /**
+     * =========================================================
+     * HELPER
+     * =========================================================
+     */
 
-        $btn.prop('disabled', true).text('Đang lưu...');
-
-        var data = {
-            action: 'aicf_save_campaign',
-            nonce: aicfAdmin.nonce,
-            title: $form.find('[name="title"]').val(),
-            target_language: $form.find('[name="target_language"]').val() || 'vi',
-            tone_of_voice: $form.find('[name="tone_of_voice"]').val() || 'professional',
-            ai_provider: $form.find('[name="ai_provider"]').val() || 'openai',
-            ai_model: $form.find('[name="ai_model"]').val() || 'gpt-4o-mini'
-        };
-
-        $.post(aicfAdmin.ajax_url, data, function (res) {
-            $btn.prop('disabled', false).text('Lưu Chiến Dịch');
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + res.data.message);
-            }
-        });
-    });
-
-    // Xóa Campaign (Tự động xóa sạch toàn bộ Keywords liên quan)
-    $(document).on('click', '.btn-delete-campaign, #aicf-btn-delete-campaign', function (e) {
-        e.preventDefault();
-        var campaignId = $(this).data('id');
-
-        if (!campaignId) return;
-
-        if (!confirm('CẢNH BÁO: Xóa Chiến dịch này sẽ XÓA SẠCH toàn bộ danh sách từ khóa bên trong! Bạn có chắc chắn muốn xóa?')) {
-            return;
+    function getMessage(response, fallback) {
+        if (
+            response &&
+            response.data &&
+            typeof response.data === 'object' &&
+            response.data.message
+        ) {
+            return response.data.message;
         }
 
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_delete_campaign',
-            nonce: aicfAdmin.nonce,
-            campaign_id: campaignId
-        }, function (res) {
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + (res.data.message || 'Không thể xóa chiến dịch.'));
-            }
-        });
-    });
-
-
-    // ==========================================
-    // 2. QUẢN LÝ TỪ KHÓA (Thêm, Sửa, Xóa Hàng Loạt)
-    // ==========================================
-
-    // Thêm từ khóa thủ công
-    $(document).on('submit', '#aicf-keyword-form', function (e) {
-        e.preventDefault();
-        var $form = $(this);
-        var $btn = $form.find('button[type="submit"]');
-        $btn.prop('disabled', true).text('Đang thêm...');
-
-        var data = {
-            action: 'aicf_add_keyword',
-            nonce: aicfAdmin.nonce,
-            campaign_id: $form.find('[name="campaign_id"]').val(),
-            keyword: $form.find('[name="keyword"]').val(),
-            intent: $form.find('[name="intent"]').val() || '',
-            cluster: $form.find('[name="cluster"]').val() || ''
-        };
-
-        $.post(aicfAdmin.ajax_url, data, function (res) {
-            $btn.prop('disabled', false).text('Thêm Từ Khóa');
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + res.data.message);
-            }
-        });
-    });
-
-    // Sửa từ khóa thủ công (Nút Sửa kế bên nút Xóa)
-    $(document).on('click', '.btn-edit-keyword, .aicf-btn-edit-keyword', function (e) {
-        e.preventDefault();
-        var $btn = $(this);
-        var id = $btn.data('id');
-        var currentKw = $btn.data('keyword') || $btn.closest('tr').find('.keyword-text').text().trim();
-
-        var newKw = prompt('Chỉnh sửa từ khóa:', currentKw);
-        if (newKw === null || newKw.trim() === '') return;
-
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_update_keyword',
-            nonce: aicfAdmin.nonce,
-            id: id,
-            keyword: newKw.trim()
-        }, function (res) {
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + (res.data.message || 'Không thể cập nhật từ khóa.'));
-            }
-        });
-    });
-
-    // Xóa 1 từ khóa đơn lẻ
-    $(document).on('click', '.btn-delete-keyword, .aicf-btn-delete-keyword', function (e) {
-        e.preventDefault();
-        var id = $(this).data('id');
-        if (!id) return;
-
-        if (!confirm('Bạn có chắc chắn muốn xóa từ khóa này?')) return;
-
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_delete_keyword',
-            nonce: aicfAdmin.nonce,
-            id: id
-        }, function (res) {
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + (res.data.message || 'Không thể xóa từ khóa.'));
-            }
-        });
-    });
-
-    // TÍCH CHỌN TẤT CẢ (Select All Keywords) BẢNG BÀI VIẾT / TỪ KHÓA
-    $(document).on('change', '#aicf-select-all-keywords, .aicf-select-all-keywords', function () {
-        var isChecked = $(this).is(':checked');
-        $('.aicf-keyword-cb, .keyword-cb').prop('checked', isChecked);
-        toggleBulkDeleteButton();
-    });
-
-    $(document).on('change', '.aicf-keyword-cb, .keyword-cb', function () {
-        var total = $('.aicf-keyword-cb, .keyword-cb').length;
-        var checked = $('.aicf-keyword-cb:checked, .keyword-cb:checked').length;
-        $('#aicf-select-all-keywords, .aicf-select-all-keywords').prop('checked', total === checked && total > 0);
-        toggleBulkDeleteButton();
-    });
-
-    function toggleBulkDeleteButton() {
-        var checkedCount = $('.aicf-keyword-cb:checked, .keyword-cb:checked').length;
-        var $btnBulk = $('#aicf-btn-bulk-delete-keywords, #btn-bulk-delete-keywords');
-        
-        if (checkedCount > 0) {
-            $btnBulk.show().removeClass('hidden').text('Xóa Đã Chọn (' + checkedCount + ')');
-        } else {
-            $btnBulk.hide().addClass('hidden');
+        if (response && response.data && typeof response.data === 'string') {
+            return response.data;
         }
+
+        return fallback || 'Có lỗi xảy ra.';
     }
 
-    // XÓA HÀNG LOẠT TỪ KHÓA ĐÃ CHỌN
-    $(document).on('click', '#aicf-btn-bulk-delete-keywords, #btn-bulk-delete-keywords', function (e) {
-        e.preventDefault();
-        var selectedIds = [];
-        $('.aicf-keyword-cb:checked, .keyword-cb:checked').each(function () {
-            selectedIds.push($(this).val());
-        });
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : value).html();
+    }
 
-        if (selectedIds.length === 0) return;
+    /**
+     * =========================================================
+     * 1. SAVE CAMPAIGN
+     * =========================================================
+     */
 
-        if (!confirm('Bạn có chắc chắn muốn xóa ' + selectedIds.length + ' từ khóa đã chọn?')) {
-            return;
-        }
+    $(document).on(
+        'submit',
+        '#aicf-campaign-form, .aicf-campaign-form',
+        function (e) {
+            e.preventDefault();
 
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_bulk_delete_keywords',
-            nonce: aicfAdmin.nonce,
-            ids: selectedIds
-        }, function (res) {
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
+            var $form = $(this);
+            var $btn = $form.find(
+                'button[type="submit"], input[type="submit"]'
+            );
+
+            var originalText = $btn.is('input')
+                ? $btn.val()
+                : $btn.text();
+
+            $btn.prop('disabled', true);
+
+            if ($btn.is('input')) {
+                $btn.val('Đang lưu...');
             } else {
-                alert('Lỗi: ' + (res.data.message || 'Có lỗi xảy ra khi xóa.'));
-            }
-        });
-    });
-
-
-    // ==========================================
-    // 3. GỢI Ý TỪ KHÓA BẰNG AI
-    // ==========================================
-
-    $(document).on('click', '#aicf-btn-suggest', function () {
-        var $btn = $(this);
-        var seed = $('#aicf-suggest-seed').val();
-        var context = $('#aicf-suggest-context').val();
-
-        if (!seed) {
-            alert('Vui lòng nhập từ khóa hoặc chủ đề gốc.');
-            return;
-        }
-
-        $btn.prop('disabled', true).text('Đang phân tích...');
-        $('#aicf-suggest-results').hide();
-        $('#aicf-suggest-tbody').empty();
-
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_suggest_keywords',
-            nonce: aicfAdmin.nonce,
-            seed_keyword: seed,
-            context: context
-        }, function (res) {
-            $btn.prop('disabled', false).text('✨ Phân Tích & Gợi Ý Từ Khóa');
-
-            if (!res.success) {
-                alert('Lỗi: ' + res.data.message);
-                return;
+                $btn.text('Đang lưu...');
             }
 
-            var $tbody = $('#aicf-suggest-tbody');
-            $.each(res.data.keywords, function (i, kw) {
-                var row = '<tr>' +
-                    '<td><input type="checkbox" class="aicf-kw-check" ' +
-                        'data-keyword="' + $('<div>').text(kw.keyword).html() + '" ' +
-                        'data-intent="' + kw.intent + '" ' +
-                        'data-cluster="' + $('<div>').text(kw.cluster).html() + '" ' +
-                        'data-priority="' + kw.priority + '" checked></td>' +
-                    '<td><strong>' + $('<div>').text(kw.keyword).html() + '</strong></td>' +
-                    '<td>' + kw.intent + '</td>' +
-                    '<td>' + $('<div>').text(kw.cluster).html() + '</td>' +
-                    '<td>' + kw.priority + '</td>' +
-                    '</tr>';
-                $tbody.append(row);
-            });
+            var data = {
+                action: 'aicf_save_campaign',
+                nonce: aicfAdmin.nonce,
+                title: $form.find('[name="title"]').val(),
+                target_language:
+                    $form.find('[name="target_language"]').val() || 'vi',
+                tone_of_voice:
+                    $form.find('[name="tone_of_voice"]').val() ||
+                    'professional',
+                ai_provider:
+                    $form.find('[name="ai_provider"]').val() || 'gemini',
+                ai_model:
+                    $form.find('[name="ai_model"]').val() || ''
+            };
 
-            $('#aicf-suggest-results').show();
-        }).fail(function () {
-            $btn.prop('disabled', false).text('✨ Phân Tích & Gợi Ý Từ Khóa');
-            alert('Lỗi kết nối, vui lòng thử lại.');
-        });
-    });
+            $.ajax({
+                url: aicfAdmin.ajax_url,
+                type: 'POST',
+                dataType: 'json',
+                data: data
+            })
+                .done(function (res) {
+                    if (res.success) {
+                        alert(getMessage(res, 'Lưu Campaign thành công.'));
+                        window.location.reload();
+                    } else {
+                        alert(
+                            'Lỗi: ' +
+                                getMessage(
+                                    res,
+                                    'Không thể lưu Campaign.'
+                                )
+                        );
+                    }
+                })
+                .fail(function (xhr) {
+                    console.error(
+                        'AICF save campaign error:',
+                        xhr.responseText
+                    );
 
-    $(document).on('change', '#aicf-check-all', function () {
-        $('.aicf-kw-check').prop('checked', $(this).is(':checked'));
-    });
+                    alert(
+                        'Lỗi kết nối máy chủ. Vui lòng kiểm tra Console/Debug Log.'
+                    );
+                })
+                .always(function () {
+                    $btn.prop('disabled', false);
 
-    $(document).on('click', '#aicf-btn-add-selected', function () {
-        var $btn = $(this);
-        var campaign_id = $('#aicf-suggest-campaign').val();
-
-        if (!campaign_id) {
-            alert('Vui lòng chọn Campaign trước khi thêm từ khóa.');
-            return;
+                    if ($btn.is('input')) {
+                        $btn.val(originalText);
+                    } else {
+                        $btn.text(originalText);
+                    }
+                });
         }
+    );
 
-        var items = [];
-        $('.aicf-kw-check:checked').each(function () {
-            items.push({
-                keyword: $(this).data('keyword'),
-                intent: $(this).data('intent'),
-                cluster: $(this).data('cluster'),
-                priority: $(this).data('priority')
-            });
-        });
-
-        if (items.length === 0) {
-            alert('Vui lòng chọn ít nhất 1 từ khóa.');
-            return;
-        }
-
-        $btn.prop('disabled', true).text('Đang thêm...');
-
-        $.post(aicfAdmin.ajax_url, {
-            action: 'aicf_bulk_add_suggested',
-            nonce: aicfAdmin.nonce,
-            campaign_id: campaign_id,
-            items: items
-        }, function (res) {
-            $btn.prop('disabled', false).text('➕ Thêm Các Từ Khóa Đã Chọn');
-            if (res.success) {
-                alert(res.data.message);
-                window.location.reload();
-            } else {
-                alert('Lỗi: ' + res.data.message);
-            }
-        });
-    });
-
-
-    // ==========================================
-    // 4. XỬ LÝ FORM SETTINGS
-    // ==========================================
+    /**
+     * =========================================================
+     * 2. SAVE SETTINGS
+     * =========================================================
+     */
 
     $(document).on('submit', '#aicf-settings-form', function (e) {
         e.preventDefault();
+
+        var $form = $(this);
         var $btn = $('#btn-save-settings');
+
+        var originalText = $btn.text();
+
         $btn.prop('disabled', true).text('Đang lưu...');
 
         var data = {
             action: 'aicf_save_settings',
             nonce: aicfAdmin.nonce,
-            openai_key: $('#openai_key').val(),
-            gemini_key: $('#gemini_key').val(),
-            default_provider: $('#default_provider').val()
+            openai_key: $('#openai_key').val() || '',
+            gemini_key: $('#gemini_key').val() || '',
+            default_provider: $('#default_provider').val() || 'gemini'
         };
 
-        $.post(aicfAdmin.ajax_url, data, function (res) {
-            $btn.prop('disabled', false).text('Lưu Cài Đặt');
-            alert(res.data.message);
-        });
+        $.ajax({
+            url: aicfAdmin.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: data
+        })
+            .done(function (res) {
+                if (res.success) {
+                    alert(
+                        getMessage(
+                            res,
+                            'Đã lưu cài đặt thành công.'
+                        )
+                    );
+                } else {
+                    alert(
+                        'Lỗi: ' +
+                            getMessage(
+                                res,
+                                'Không thể lưu cài đặt.'
+                            )
+                    );
+                }
+            })
+            .fail(function (xhr) {
+                console.error(
+                    'AICF save settings error:',
+                    xhr.responseText
+                );
+
+                alert(
+                    'Lỗi kết nối máy chủ. Vui lòng kiểm tra Console/Debug Log.'
+                );
+            })
+            .always(function () {
+                $btn.prop('disabled', false).text(originalText);
+            });
     });
+
+    /**
+     * =========================================================
+     * 3. ADD KEYWORD MANUALLY
+     * =========================================================
+     *
+     * IMPORTANT:
+     * Plugin sử dụng action:
+     * aicf_add_keyword
+     *
+     * Không dùng aicf_save_keyword.
+     */
+
+    $(document).on('submit', '#aicf-keyword-form', function (e) {
+        e.preventDefault();
+
+        var $form = $(this);
+        var $btn = $form.find('button[type="submit"]');
+
+        var originalText = $btn.text();
+
+        var campaignId = $form
+            .find('[name="campaign_id"]')
+            .val();
+
+        var keyword = $form
+            .find('[name="keyword"]')
+            .val();
+
+        var intent = $form
+            .find('[name="intent"]')
+            .val() || '';
+
+        var cluster = $form
+            .find('[name="cluster"]')
+            .val() || '';
+
+        if (!campaignId) {
+            alert('Vui lòng chọn Campaign.');
+            return;
+        }
+
+        if (!keyword || !keyword.trim()) {
+            alert('Vui lòng nhập Keyword.');
+            return;
+        }
+
+        $btn.prop('disabled', true).text('Đang thêm...');
+
+        $.ajax({
+            url: aicfAdmin.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'aicf_add_keyword',
+                nonce: aicfAdmin.nonce,
+                campaign_id: campaignId,
+                keyword: keyword,
+                intent: intent,
+                cluster: cluster
+            }
+        })
+            .done(function (res) {
+                if (res.success) {
+                    alert(
+                        getMessage(
+                            res,
+                            'Thêm Keyword thành công.'
+                        )
+                    );
+
+                    window.location.reload();
+                } else {
+                    alert(
+                        'Lỗi: ' +
+                            getMessage(
+                                res,
+                                'Không thể thêm Keyword.'
+                            )
+                    );
+                }
+            })
+            .fail(function (xhr) {
+                console.error(
+                    'AICF add keyword error:',
+                    xhr.responseText
+                );
+
+                alert(
+                    'Lỗi kết nối máy chủ. Vui lòng kiểm tra Console/Debug Log.'
+                );
+            })
+            .always(function () {
+                $btn.prop('disabled', false).text(originalText);
+            });
+    });
+
+    /**
+     * =========================================================
+     * 4. AI KEYWORD ANALYSIS / SUGGESTION
+     * =========================================================
+     */
+
+    $(document).on('click', '#aicf-btn-suggest', function (e) {
+        e.preventDefault();
+
+        var $btn = $(this);
+
+        var seed = $.trim(
+            $('#aicf-suggest-seed').val() || ''
+        );
+
+        var context = $.trim(
+            $('#aicf-suggest-context').val() || ''
+        );
+
+        if (!seed) {
+            alert(
+                'Vui lòng nhập từ khóa hoặc chủ đề gốc.'
+            );
+
+            $('#aicf-suggest-seed').focus();
+
+            return;
+        }
+
+        var originalText = $btn.text();
+
+        $btn
+            .prop('disabled', true)
+            .text('Đang phân tích bằng AI...');
+
+        $('#aicf-suggest-results').hide();
+        $('#aicf-suggest-tbody').empty();
+
+        $.ajax({
+            url: aicfAdmin.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            timeout: 180000,
+            data: {
+                action: 'aicf_suggest_keywords',
+                nonce: aicfAdmin.nonce,
+                seed_keyword: seed,
+                context: context
+            }
+        })
+            .done(function (res) {
+                console.log(
+                    'AICF keyword analysis response:',
+                    res
+                );
+
+                if (!res || !res.success) {
+                    alert(
+                        'Lỗi: ' +
+                            getMessage(
+                                res,
+                                'AI không thể phân tích từ khóa.'
+                            )
+                    );
+
+                    return;
+                }
+
+                var keywords = [];
+
+                if (
+                    res.data &&
+                    Array.isArray(res.data.keywords)
+                ) {
+                    keywords = res.data.keywords;
+                }
+
+                if (!keywords.length) {
+                    alert(
+                        'AI không trả về từ khóa nào. Vui lòng thử lại.'
+                    );
+
+                    return;
+                }
+
+                var $tbody =
+                    $('#aicf-suggest-tbody');
+
+                $.each(keywords, function (index, kw) {
+                    if (
+                        !kw ||
+                        !kw.keyword ||
+                        !String(kw.keyword).trim()
+                    ) {
+                        return;
+                    }
+
+                    var keyword = String(
+                        kw.keyword
+                    ).trim();
+
+                    var intent = String(
+                        kw.intent || 'informational'
+                    ).trim();
+
+                    var cluster = String(
+                        kw.cluster || ''
+                    ).trim();
+
+                    var priority = parseInt(
+                        kw.priority,
+                        10
+                    );
+
+                    if (
+                        isNaN(priority) ||
+                        priority < 1
+                    ) {
+                        priority = 3;
+                    }
+
+                    if (priority > 5) {
+                        priority = 5;
+                    }
+
+                    var priorityLabel =
+                        'Priority ' + priority;
+
+                    var row =
+                        '<tr>' +
+                        '<td>' +
+                        '<input type="checkbox" ' +
+                        'class="aicf-kw-check" ' +
+                        'data-keyword="' +
+                        escapeHtml(keyword) +
+                        '" ' +
+                        'data-intent="' +
+                        escapeHtml(intent) +
+                        '" ' +
+                        'data-cluster="' +
+                        escapeHtml(cluster) +
+                        '" ' +
+                        'data-priority="' +
+                        priority +
+                        '" checked>' +
+                        '</td>' +
+
+                        '<td>' +
+                        '<strong>' +
+                        escapeHtml(keyword) +
+                        '</strong>' +
+                        '</td>' +
+
+                        '<td>' +
+                        escapeHtml(intent) +
+                        '</td>' +
+
+                        '<td>' +
+                        escapeHtml(cluster) +
+                        '</td>' +
+
+                        '<td>' +
+                        escapeHtml(priorityLabel) +
+                        '</td>' +
+
+                        '</tr>';
+
+                    $tbody.append(row);
+                });
+
+                if (!$tbody.children().length) {
+                    alert(
+                        'Kết quả AI không chứa dữ liệu từ khóa hợp lệ.'
+                    );
+
+                    return;
+                }
+
+                $('#aicf-check-all').prop(
+                    'checked',
+                    true
+                );
+
+                $('#aicf-suggest-results').show();
+
+                // Scroll nhẹ tới kết quả.
+                $('html, body').animate(
+                    {
+                        scrollTop:
+                            $('#aicf-suggest-results').offset()
+                                ? $('#aicf-suggest-results')
+                                      .offset().top - 50
+                                : 0
+                    },
+                    300
+                );
+            })
+            .fail(function (xhr, status) {
+                console.error(
+                    'AICF keyword analysis error:',
+                    status,
+                    xhr.responseText
+                );
+
+                if (status === 'timeout') {
+                    alert(
+                        'AI xử lý quá lâu và trình duyệt đã timeout. ' +
+                        'Vui lòng thử lại hoặc giảm độ dài Bối cảnh.'
+                    );
+                } else {
+                    alert(
+                        'Lỗi kết nối máy chủ khi phân tích từ khóa. ' +
+                        'Vui lòng kiểm tra Console và WordPress Debug Log.'
+                    );
+                }
+            })
+            .always(function () {
+                $btn
+                    .prop('disabled', false)
+                    .text(originalText);
+            });
+    });
+
+    /**
+     * =========================================================
+     * 5. CHECK / UNCHECK ALL
+     * =========================================================
+     */
+
+    $(document).on(
+        'change',
+        '#aicf-check-all',
+        function () {
+            $('.aicf-kw-check').prop(
+                'checked',
+                $(this).is(':checked')
+            );
+        }
+    );
+
+    /**
+     * Nếu bỏ chọn từng item thì cập nhật checkbox All.
+     */
+
+    $(document).on(
+        'change',
+        '.aicf-kw-check',
+        function () {
+            var total =
+                $('.aicf-kw-check').length;
+
+            var checked =
+                $('.aicf-kw-check:checked').length;
+
+            $('#aicf-check-all').prop(
+                'checked',
+                total > 0 && total === checked
+            );
+        }
+    );
+
+    /**
+     * =========================================================
+     * 6. ADD SELECTED AI KEYWORDS TO CAMPAIGN
+     * =========================================================
+     */
+
+    $(document).on(
+        'click',
+        '#aicf-btn-add-selected',
+        function (e) {
+            e.preventDefault();
+
+            var $btn = $(this);
+
+            var campaignId =
+                $('#aicf-suggest-campaign').val();
+
+            if (!campaignId) {
+                alert(
+                    'Vui lòng chọn Campaign trước khi thêm từ khóa.'
+                );
+
+                return;
+            }
+
+            var items = [];
+
+            $('.aicf-kw-check:checked').each(
+                function () {
+                    var $checkbox = $(this);
+
+                    items.push({
+                        keyword:
+                            $checkbox.attr(
+                                'data-keyword'
+                            ) || '',
+
+                        intent:
+                            $checkbox.attr(
+                                'data-intent'
+                            ) || 'informational',
+
+                        cluster:
+                            $checkbox.attr(
+                                'data-cluster'
+                            ) || '',
+
+                        priority: parseInt(
+                            $checkbox.attr(
+                                'data-priority'
+                            ),
+                            10
+                        ) || 3
+                    });
+                }
+            );
+
+            if (!items.length) {
+                alert(
+                    'Vui lòng chọn ít nhất 1 từ khóa.'
+                );
+
+                return;
+            }
+
+            var originalText = $btn.text();
+
+            $btn
+                .prop('disabled', true)
+                .text('Đang thêm ' + items.length + ' từ khóa...');
+
+            $.ajax({
+                url: aicfAdmin.ajax_url,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'aicf_bulk_add_suggested',
+                    nonce: aicfAdmin.nonce,
+                    campaign_id: campaignId,
+                    items: items
+                }
+            })
+                .done(function (res) {
+                    if (res.success) {
+                        alert(
+                            getMessage(
+                                res,
+                                'Đã thêm từ khóa thành công.'
+                            )
+                        );
+
+                        window.location.reload();
+                    } else {
+                        alert(
+                            'Lỗi: ' +
+                                getMessage(
+                                    res,
+                                    'Không thể thêm từ khóa.'
+                                )
+                        );
+                    }
+                })
+                .fail(function (xhr) {
+                    console.error(
+                        'AICF bulk add keywords error:',
+                        xhr.responseText
+                    );
+
+                    alert(
+                        'Lỗi kết nối máy chủ. Vui lòng thử lại.'
+                    );
+                })
+                .always(function () {
+                    $btn
+                        .prop('disabled', false)
+                        .text(originalText);
+                });
+        }
+    );
 });
