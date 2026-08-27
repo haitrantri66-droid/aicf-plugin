@@ -13,11 +13,53 @@ class KeywordAjax {
 
     public static function init() {
         add_action('wp_ajax_aicf_add_keyword', [__CLASS__, 'add_keyword']);
+        add_action('wp_ajax_aicf_update_keyword', [__CLASS__, 'update_keyword']); // Action mới
         add_action('wp_ajax_aicf_delete_keyword', [__CLASS__, 'delete_keyword']);
         add_action('wp_ajax_aicf_bulk_delete_keywords', [__CLASS__, 'bulk_delete_keywords']);
         add_action('wp_ajax_aicf_import_keywords_csv', [__CLASS__, 'import_csv']);
         add_action('wp_ajax_aicf_suggest_keywords', [__CLASS__, 'suggest_keywords']);
         add_action('wp_ajax_aicf_bulk_add_suggested', [__CLASS__, 'bulk_add_suggested']);
+    }
+
+    /**
+     * Chỉnh sửa thủ công Từ khóa (Keyword, Intent, Cluster, Priority)
+     */
+    public static function update_keyword() {
+        @ob_clean();
+        check_ajax_referer(SecurityManager::NONCE_ACTION, 'nonce');
+        SecurityManager::check_capability();
+
+        $id       = isset($_POST['id']) ? intval($_POST['id']) : 0;
+        $keyword  = isset($_POST['keyword']) ? sanitize_text_field(wp_unslash($_POST['keyword'])) : '';
+        $intent   = isset($_POST['intent']) ? sanitize_text_field(wp_unslash($_POST['intent'])) : '';
+        $cluster  = isset($_POST['cluster']) ? sanitize_text_field(wp_unslash($_POST['cluster'])) : '';
+        $priority = isset($_POST['priority']) ? intval($_POST['priority']) : 3;
+
+        if ($id <= 0 || empty($keyword)) {
+            wp_send_json_error(['message' => 'ID hoặc Từ khóa không hợp lệ.']);
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'aicf_keywords';
+
+        $updated = $wpdb->update(
+            $table,
+            [
+                'keyword'  => $keyword,
+                'intent'   => $intent,
+                'cluster'  => $cluster,
+                'priority' => $priority
+            ],
+            ['id' => $id],
+            ['%s', '%s', '%s', '%d'],
+            ['%d']
+        );
+
+        if ($updated !== false) {
+            wp_send_json_success(['message' => 'Cập nhật từ khóa thành công!']);
+        }
+
+        wp_send_json_error(['message' => 'Không thể cập nhật từ khóa hoặc dữ liệu không thay đổi.']);
     }
 
     public static function add_keyword() {
