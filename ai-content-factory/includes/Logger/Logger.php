@@ -13,9 +13,7 @@ class Logger {
         $status = isset($data['status']) ? sanitize_text_field($data['status']) : 'info';
 
         $insert_data = [
-            // level/object_type are what LogsPage.php actually reads and
-            // displays, so map the AI-request status onto them too.
-            'level'          => ($status === 'failed' || $status === 'error') ? 'error' : 'info',
+            'level'          => ($status === 'failed' || $status === 'error') ? 'error' : (($status === 'warning') ? 'warning' : 'info'),
             'object_type'    => isset($data['request_type']) ? sanitize_text_field($data['request_type']) : 'ai_request',
             'provider'       => isset($data['provider']) ? sanitize_text_field($data['provider']) : null,
             'model'          => isset($data['model']) ? sanitize_text_field($data['model']) : null,
@@ -34,7 +32,7 @@ class Logger {
     }
 
     /**
-     * Ghi log muc Info (thong tin chung)
+     * Ghi log mức Info
      */
     public static function info($message, $request_type = 'system') {
         self::log([
@@ -45,7 +43,18 @@ class Logger {
     }
 
     /**
-     * Ghi log muc Error (loi)
+     * Ghi log mức Warning
+     */
+    public static function warning($message, $request_type = 'system') {
+        self::log([
+            'status'       => 'warning',
+            'request_type' => $request_type,
+            'message'      => $message,
+        ]);
+    }
+
+    /**
+     * Ghi log mức Error
      */
     public static function error($message, $request_type = 'system') {
         self::log([
