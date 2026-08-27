@@ -16,7 +16,7 @@ class Settings {
         if (isset($_POST['aicf_save_settings'])) {
             if (isset($_POST['_wpnonce']) && wp_verify_nonce($_POST['_wpnonce'], 'aicf_save_settings_action')) {
                 
-                // Keys & Providers (Dùng wp_unslash để xóa sạch dấu gạch chéo ngược)
+                // Keys & Providers
                 if (isset($_POST['aicf_gemini_api_key'])) {
                     update_option('aicf_gemini_api_key', sanitize_text_field(wp_unslash($_POST['aicf_gemini_api_key'])));
                 }
@@ -44,7 +44,15 @@ class Settings {
                     update_option('aicf_company_address', sanitize_text_field(wp_unslash($_POST['aicf_company_address'])));
                 }
 
-                // System Prompt - Tự động lọc bỏ hoàn toàn các ký tự \vert và dấu gạch chéo rác
+                // Cấu Hình Hậu Kỳ SEO (Mới bổ sung cho Giai đoạn 3 & 4)
+                if (isset($_POST['aicf_max_internal_links'])) {
+                    update_option('aicf_max_internal_links', intval($_POST['aicf_max_internal_links']));
+                }
+                if (isset($_POST['aicf_duplicate_threshold'])) {
+                    update_option('aicf_duplicate_threshold', intval($_POST['aicf_duplicate_threshold']));
+                }
+
+                // System Prompt
                 if (isset($_POST['aicf_custom_system_prompt'])) {
                     $clean_prompt = wp_unslash($_POST['aicf_custom_system_prompt']);
                     $clean_prompt = str_replace(array('\vert', '\\|'), '|', $clean_prompt);
@@ -66,6 +74,10 @@ class Settings {
         $company_hotline = get_option('aicf_company_hotline', '');
         $company_address = get_option('aicf_company_address', '');
 
+        // SEO Post-Processing Options
+        $max_internal_links  = get_option('aicf_max_internal_links', 3);
+        $duplicate_threshold = get_option('aicf_duplicate_threshold', 80);
+
         // Prompt Mặc định chuẩn sạch
         $default_prompt = "Bạn là Chuyên gia Kỹ thuật & Biên tập viên Content SEO với 15 năm kinh nghiệm thực chiến tại {brand_name}.\n\n"
                         . "Hãy viết một bài viết phân tích chuyên sâu, sắc bén và tối ưu SEO cho từ khóa: '{keyword}'.\n\n"
@@ -78,7 +90,6 @@ class Settings {
                         . "6. Bắt đầu ngay bài viết bằng thẻ <h2> hoặc <p>, không viết lời chào vô nghĩa.";
 
         $system_prompt = get_option('aicf_custom_system_prompt', $default_prompt);
-        // Lọc sạch \vert còn sót lại trong DB để hiển thị ra textarea
         $system_prompt = str_replace(array('\vert', '\\|'), '|', $system_prompt);
         ?>
         <div class="wrap">
@@ -121,38 +132,59 @@ class Settings {
                         <tr>
                             <th scope="row"><label for="aicf_company_name">Tên Doanh Nghiệp / Công Ty</label></th>
                             <td>
-                                <input type="text" name="aicf_company_name" id="aicf_company_name" value="<?php echo esc_attr($company_name); ?>" class="regular-text" placeholder="Ví dụ: Công ty TNHH HPDOOR Việt Nam" />
+                                <input type="text" name="aicf_company_name" id="aicf_company_name" value="<?php echo esc_attr($company_name); ?>" class="regular-text" placeholder="Ví dụ: Công ty TNHH Kỹ Thuật Điện Lạnh" />
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="aicf_brand_name">Tên Thương Hiệu (Ngắn)</label></th>
                             <td>
-                                <input type="text" name="aicf_brand_name" id="aicf_brand_name" value="<?php echo esc_attr($brand_name); ?>" class="regular-text" placeholder="Ví dụ: HPDOOR" />
+                                <input type="text" name="aicf_brand_name" id="aicf_brand_name" value="<?php echo esc_attr($brand_name); ?>" class="regular-text" placeholder="Ví dụ: Kỹ Thuật Điện Lạnh" />
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="aicf_company_website">Website</label></th>
                             <td>
-                                <input type="url" name="aicf_company_website" id="aicf_company_website" value="<?php echo esc_attr($company_website); ?>" class="regular-text" placeholder="https://hpdoor.com.vn" />
+                                <input type="url" name="aicf_company_website" id="aicf_company_website" value="<?php echo esc_attr($company_website); ?>" class="regular-text" placeholder="https://dichvudienlanh.com" />
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="aicf_company_hotline">Hotline / Zalo</label></th>
                             <td>
-                                <input type="text" name="aicf_company_hotline" id="aicf_company_hotline" value="<?php echo esc_attr($company_hotline); ?>" class="regular-text" placeholder="0900.000.000" />
+                                <input type="text" name="aicf_company_hotline" id="aicf_company_hotline" value="<?php echo esc_attr($company_hotline); ?>" class="regular-text" placeholder="1800.00.08" />
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="aicf_company_address">Địa Chỉ / Xưởng / Showroom</label></th>
                             <td>
-                                <input type="text" name="aicf_company_address" id="aicf_company_address" value="<?php echo esc_attr($company_address); ?>" class="large-text" placeholder="Địa chỉ xưởng..." />
+                                <input type="text" name="aicf_company_address" id="aicf_company_address" value="<?php echo esc_attr($company_address); ?>" class="large-text" placeholder="Địa chỉ chi nhánh..." />
                             </td>
                         </tr>
                     </tbody>
                 </table>
 
                 <hr />
-                <h2>3. System Prompt (Khung Viết Bài Tự Động)</h2>
+                <h2>3. Tự Động Hóa & Tối Ưu SEO Hậu Kỳ</h2>
+                <table class="form-table" role="presentation">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="aicf_max_internal_links">Số lượng Internal Links tối đa / bài</label></th>
+                            <td>
+                                <input type="number" name="aicf_max_internal_links" id="aicf_max_internal_links" value="<?php echo esc_attr($max_internal_links); ?>" min="0" max="10" class="small-text" />
+                                <span class="description">Tự động quét từ khóa và chèn link liên quan vào bài viết (mặc định: 3 links).</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="aicf_duplicate_threshold">Ngưỡng cảnh báo trùng lặp nội dung (%)</label></th>
+                            <td>
+                                <input type="number" name="aicf_duplicate_threshold" id="aicf_duplicate_threshold" value="<?php echo esc_attr($duplicate_threshold); ?>" min="50" max="100" class="small-text" /> %
+                                <span class="description">Ghi log cảnh báo nếu bài viết mới sinh ra có mức độ tương đồng vượt quá ngưỡng này so với bài cũ (mặc định: 80%).</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <hr />
+                <h2>4. System Prompt (Khung Viết Bài Tự Động)</h2>
                 <table class="form-table" role="presentation">
                     <tbody>
                         <tr>
